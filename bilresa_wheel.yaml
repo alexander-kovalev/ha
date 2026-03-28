@@ -132,18 +132,22 @@ action:
           - condition: template
             value_template: >-
               {{ trigger.id == 'scroll_left' and
-                 trigger.to_state.attributes.event_type == 'multi_press_1' }}
+                 trigger.to_state.attributes.event_type is defined and
+                 trigger.to_state.attributes.event_type.startswith('multi_press_') }}
         sequence:
           - condition: state
             entity_id: !input target_light
             state: "on"
+          - variables:
+              scroll_clicks: >-
+                {{ trigger.to_state.attributes.event_type.split('_')[-1] | int(1) }}
           - action: light.turn_on
             target:
               entity_id: !input target_light
             data:
               brightness_step_pct: >-
-                {{ -1 * [trigger.to_state.attributes.get('totalNumberOfPressesCounted', 1)|int(1) * var_dim_step,
-                   (state_attr(var_light, 'brightness')|int(0)) * 100 / 255 - var_min_brightness]
+                {{ -1 * [scroll_clicks * var_dim_step,
+                   (state_attr(var_light, 'brightness') | int(0)) * 100 / 255 - var_min_brightness]
                    | min }}
 
       # ──────────────────────────────────────────────
@@ -153,14 +157,18 @@ action:
           - condition: template
             value_template: >-
               {{ trigger.id == 'scroll_right' and
-                 trigger.to_state.attributes.event_type == 'multi_press_1' }}
+                 trigger.to_state.attributes.event_type is defined and
+                 trigger.to_state.attributes.event_type.startswith('multi_press_') }}
         sequence:
           - condition: state
             entity_id: !input target_light
             state: "on"
+          - variables:
+              scroll_clicks: >-
+                {{ trigger.to_state.attributes.event_type.split('_')[-1] | int(1) }}
           - action: light.turn_on
             target:
               entity_id: !input target_light
             data:
               brightness_step_pct: >-
-                {{ trigger.to_state.attributes.get('totalNumberOfPressesCounted', 1)|int(1) * var_dim_step }}
+                {{ scroll_clicks * var_dim_step }}
