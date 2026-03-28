@@ -83,7 +83,8 @@ blueprint:
           mode: slider
 
 # Allow re-entry so rapid scrolling doesn't get blocked
-mode: restart
+mode: queued
+max: 10
 max_exceeded: silent
 
 variables:
