@@ -1,0 +1,166 @@
+blueprint:
+  name: IKEA Bilresa Scroll Wheel – Simple Dimmer
+  description: >
+    Simple blueprint for the IKEA BILRESA E2490 scroll wheel (Matter/Thread).
+
+    - **Button click** → toggle light on/off
+
+    - **Scroll wheel** → dim light up/down
+
+
+    The scroll wheel sends 1–8 "clicks" per scroll gesture. Brightness changes
+    by (clicks × step size) percent per gesture.
+  domain: automation
+  input:
+    # --- Device selection ---
+    button_entity:
+      name: Button entity
+      description: >
+        The event entity for the Bilresa button (usually ends with `_1`).
+        Find it under Settings → Devices → your Bilresa → Events section.
+      selector:
+        entity:
+          filter:
+            domain: event
+
+    scroll_left_entity:
+      name: Scroll left entity
+      description: >
+        The event entity for scrolling left/counter-clockwise
+        (usually ends with `_2`).
+      selector:
+        entity:
+          filter:
+            domain: event
+
+    scroll_right_entity:
+      name: Scroll right entity
+      description: >
+        The event entity for scrolling right/clockwise
+        (usually ends with `_3`).
+      selector:
+        entity:
+          filter:
+            domain: event
+
+    # --- Target light ---
+    target_light:
+      name: Target light
+      description: The light (or light group) to control.
+      selector:
+        entity:
+          filter:
+            domain: light
+
+    # --- Dimming settings ---
+    dim_step_pct:
+      name: Dim step (%)
+      description: >
+        Brightness change per scroll click in percent.
+        One scroll gesture sends 1–8 clicks, so the total change per gesture
+        is (clicks × this value).
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 25
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+
+    min_brightness_pct:
+      name: Minimum brightness (%)
+      description: >
+        The light will not dim below this value. Prevents the light from
+        appearing to turn off while still being "on".
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+
+# Allow re-entry so rapid scrolling doesn't get blocked
+mode: restart
+max_exceeded: silent
+
+variables:
+  var_button: !input button_entity
+  var_scroll_left: !input scroll_left_entity
+  var_scroll_right: !input scroll_right_entity
+  var_light: !input target_light
+  var_dim_step: !input dim_step_pct
+  var_min_brightness: !input min_brightness_pct
+
+trigger:
+  # Button press
+  - id: button_press
+    platform: state
+    entity_id: !input button_entity
+
+  # Scroll left (counter-clockwise → dim down)
+  - id: scroll_left
+    platform: state
+    entity_id: !input scroll_left_entity
+
+  # Scroll right (clockwise → dim up)
+  - id: scroll_right
+    platform: state
+    entity_id: !input scroll_right_entity
+
+action:
+  - choose:
+      # ──────────────────────────────────────────────
+      # BUTTON CLICK → Toggle light
+      # ──────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'button_press' and
+                 trigger.to_state.attributes.event_type == 'multi_press_1' }}
+        sequence:
+          - action: light.toggle
+            target:
+              entity_id: !input target_light
+
+      # ──────────────────────────────────────────────
+      # SCROLL LEFT → Dim down
+      # ──────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'scroll_left' and
+                 trigger.to_state.attributes.event_type == 'multi_press_1' }}
+        sequence:
+          - condition: state
+            entity_id: !input target_light
+            state: "on"
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_step_pct: >-
+                {{ -1 * [trigger.to_state.attributes.get('totalNumberOfPressesCounted', 1)|int(1) * var_dim_step,
+                   (state_attr(var_light, 'brightness')|int(0)) * 100 / 255 - var_min_brightness]
+                   | min }}
+
+      # ──────────────────────────────────────────────
+      # SCROLL RIGHT → Dim up
+      # ──────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ trigger.id == 'scroll_right' and
+                 trigger.to_state.attributes.event_type == 'multi_press_1' }}
+        sequence:
+          - condition: state
+            entity_id: !input target_light
+            state: "on"
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_step_pct: >-
+                {{ trigger.to_state.attributes.get('totalNumberOfPressesCounted', 1)|int(1) * var_dim_step }}
